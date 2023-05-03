@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0        
+// SPDX-License-Identifier: GPL-3.0
 
 pragma solidity ^0.8.9;
 
@@ -15,7 +15,7 @@ import "./Collateral.sol";
 /// @custom:experimental This is still in testing phase.
 contract Fund is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
-    
+
     enum States {
         InitializingFund, // Time before the first cycle has started
         AcceptingContributions, // Triggers at the start of a cycle
@@ -43,16 +43,16 @@ contract Fund is Ownable {
 
     uint public version; // The version of the contract
 
-    Collateral immutable public collateral; // Instance of the collateral
-    IERC20 immutable public stableToken; // Instance of the stable token
+    Collateral public immutable collateral; // Instance of the collateral
+    IERC20 public immutable stableToken; // Instance of the stable token
 
     States public currentState = States.InitializingFund; // Variable to keep track of the different States
 
     uint public totalAmountOfCycles; // Amount of cycles that this fund will have
     uint public totalParticipants; // Total amount of starting participants
-    uint immutable public cycleTime; // time for a single cycle in seconds, default is 30 days
-    uint immutable public contributionAmount; // amount in stable token currency, 6 decimals
-    uint immutable public contributionPeriod; // time for participants to contribute this cycle
+    uint public immutable cycleTime; // time for a single cycle in seconds, default is 30 days
+    uint public immutable contributionAmount; // amount in stable token currency, 6 decimals
+    uint public immutable contributionPeriod; // time for participants to contribute this cycle
 
     mapping(address => bool) public participantsTracker; // Mapping to keep track of who's a participant or not
     mapping(address => bool) public beneficiariesTracker; // Mapping to keep track of who's a beneficiary or not
@@ -90,7 +90,7 @@ contract Fund is Ownable {
         stableToken = IERC20(_stableTokenAddress);
 
         transferOwnership(collateral.owner());
-        
+
         // Set and track participants
         for (uint i = 0; i < _participants.length; i++) {
             EnumerableSet.add(participants, _participants[i]);
@@ -112,7 +112,7 @@ contract Fund is Ownable {
 
         // Starts the first cycle
         _startNewCycle();
-        
+
         // Set timestamp of deployment, which will be used to determine cycle times
         // We do this after starting the first cycle to make sure the first cycle starts smoothly
         fundStart = block.timestamp;
@@ -121,7 +121,7 @@ contract Fund is Ownable {
     /// @notice updates the state according to the input and makes sure the state can't be changed if the fund is closed. Also emits an event that this happened
     /// @param newState The new state of the fund
     function _setState(States newState) internal {
-        require (currentState != States.FundClosed, "Fund's closed");
+        require(currentState != States.FundClosed, "Fund's closed");
         currentState = newState;
         emit OnStateChanged(newState);
     }
@@ -129,9 +129,16 @@ contract Fund is Ownable {
     /// @notice This starts the new cycle and can only be called internally. Used upon deploy
     function _startNewCycle() internal {
         // currentCycle is 0 when this is called for the first time
-        require(block.timestamp > cycleTime * currentCycle + fundStart, "Too early to start new cycle");
-        require(currentState == States.InitializingFund || currentState == States.CycleOngoing, "Wrong state");
-        
+        require(
+            block.timestamp > cycleTime * currentCycle + fundStart,
+            "Too early to start new cycle"
+        );
+        require(
+            currentState == States.InitializingFund ||
+                currentState == States.CycleOngoing,
+            "Wrong state"
+        );
+
         currentCycle++;
         uint length = beneficiariesOrder.length;
         for (uint i = 0; i < length; i++) {
@@ -147,9 +154,12 @@ contract Fund is Ownable {
     function _payContribution(address payer, address participant) internal {
         // Get the amount and do the actual transfer, this will only succeed if the sender approved this contract address beforehand
         uint amount = contributionAmount;
-        
+
         bool success = stableToken.transferFrom(payer, address(this), amount);
-        require(success, "Contribution failed, did you approve stable token contract?");
+        require(
+            success,
+            "Contribution failed, did you approve stable token contract?"
+        );
 
         // Finish up, set that the participant paid for this cycle and emit an event that it's been done
         paidThisCycle[participant] = true;
@@ -167,7 +177,7 @@ contract Fund is Ownable {
             success = EnumerableSet.remove(beneficiaries, defaulter);
         }
 
-        require (success, "Could not remove defaulter");
+        require(success, "Could not remove defaulter");
         EnumerableSet.add(defaulters, defaulter);
 
         emit OnParticipantDefaulted(defaulter);
@@ -180,7 +190,7 @@ contract Fund is Ownable {
         address selectedBeneficiary = address(0);
         address[] memory arrayToCheck = beneficiariesOrder;
         uint beneficiaryIndex = 0;
-        for (uint i = 0; i < arrayToCheck.length; i++) { 
+        for (uint i = 0; i < arrayToCheck.length; i++) {
             address b = arrayToCheck[i];
             if (!beneficiariesTracker[b]) {
                 selectedBeneficiary = b;
@@ -212,7 +222,10 @@ contract Fund is Ownable {
 
         // Request contribution from the collateral for those who haven't paid this cycle
         if (EnumerableSet.length(defaulters) > 0) {
-            address[] memory expellants = collateral.requestContribution(selectedBeneficiary, EnumerableSet.values(defaulters));
+            address[] memory expellants = collateral.requestContribution(
+                selectedBeneficiary,
+                EnumerableSet.values(defaulters)
+            );
 
             for (uint i = 0; i < expellants.length; i++) {
                 if (expellants[i] == address(0)) {
@@ -221,7 +234,7 @@ contract Fund is Ownable {
                 _expelDefaulter(expellants[i]);
             }
         }
-        
+
         // Remove participant from participants set..
         if (EnumerableSet.remove(participants, selectedBeneficiary)) {
             // ..Then add them to the benificiaries set
@@ -239,11 +252,11 @@ contract Fund is Ownable {
                 paidCount++;
             }
         }
- 
+
         // Award the beneficiary with the pool and update the lastBeneficiary
         beneficiariesPool[selectedBeneficiary] = contributionAmount * paidCount;
         lastBeneficiary = selectedBeneficiary;
-        
+
         emit OnBeneficiarySelected(selectedBeneficiary);
         _setState(States.CycleOngoing);
     }
@@ -269,10 +282,13 @@ contract Fund is Ownable {
     /// @param expellant The address of the defaulter that will be expelled
     function _expelDefaulter(address expellant) internal {
         //require(msg.sender == address(collateral), "Caller is not collateral");
-        require (participantsTracker[expellant], "Expellant not part of fund");
-  
-          // Expellants should only be in the defauters set so no need to touch the other sets
-        require(EnumerableSet.remove(defaulters, expellant), "Expellant not found");
+        require(participantsTracker[expellant], "Expellant not part of fund");
+
+        // Expellants should only be in the defauters set so no need to touch the other sets
+        require(
+            EnumerableSet.remove(defaulters, expellant),
+            "Expellant not found"
+        );
 
         // Remove expellant from beneficiaries order
         // Remove expellants from participants tracker and emit that they've been expelled
@@ -291,17 +307,17 @@ contract Fund is Ownable {
         uint newLength = totalParticipants - 1;
         totalParticipants = newLength;
         expelledParticipants++;
-        
+
         emit OnTotalParticipantsUpdated(newLength);
     }
-    
+
     /// @notice Internal function for close fund which is used by _startNewCycle & _chooseBeneficiary to cover some edge-cases
     function _closeFund() internal {
         fundEnd = block.timestamp;
         _setState(States.FundClosed);
         collateral.releaseCollateral();
     }
-    
+
     /// @notice starts a new cycle manually called by the owner. Only the first cycle starts automatically upon deploy
     function startNewCycle() external onlyOwner {
         _startNewCycle();
@@ -310,17 +326,23 @@ contract Fund is Ownable {
     /// @notice Must be called at the end of the contribution period after the time has passed by the owner
     function closeFundingPeriod() external onlyOwner {
         // Current cycle minus 1 because we use the previous cycle time as start point then add contribution period
-        require(block.timestamp > cycleTime * (currentCycle - 1) + fundStart + contributionPeriod, "There's still time to contribute");
+        require(
+            block.timestamp >
+                cycleTime * (currentCycle - 1) + fundStart + contributionPeriod,
+            "There's still time to contribute"
+        );
         require(currentState == States.AcceptingContributions, "Wrong State");
 
         // Before closing, we attempt to make the autopayers pay
         address[] memory autoPayers = beneficiariesOrder;
         uint amount = contributionAmount;
         for (uint i = 0; i < autoPayers.length; i++) {
-            if (autoPayEnabled[autoPayers[i]] && 
+            if (
+                autoPayEnabled[autoPayers[i]] &&
                 !paidThisCycle[autoPayers[i]] &&
                 amount <= stableToken.allowance(autoPayers[i], address(this)) &&
-                amount <= stableToken.balanceOf(autoPayers[i])) {
+                amount <= stableToken.balanceOf(autoPayers[i])
+            ) {
                 _payContribution(autoPayers[i], autoPayers[i]);
             }
         }
@@ -338,16 +360,14 @@ contract Fund is Ownable {
                 // check where to restore the defaulter to, participants or beneficiaries
                 if (beneficiariesTracker[p]) {
                     EnumerableSet.add(beneficiaries, p);
-                }
-                else {
+                } else {
                     EnumerableSet.add(participants, p);
                 }
 
                 if (EnumerableSet.remove(defaulters, p)) {
                     emit OnParticipantUndefaulted(p);
                 }
-            }
-            else if (!EnumerableSet.contains(defaulters, p)){
+            } else if (!EnumerableSet.contains(defaulters, p)) {
                 _defaultParticipant(p);
             }
         }
@@ -355,19 +375,20 @@ contract Fund is Ownable {
         // Once we decided who defaulted and who paid, we can select the beneficiary for this cycle
         _selectBeneficiary();
 
-        if (!(currentCycle < totalAmountOfCycles)) { // If all cycles have passed, and the last cycle's time has passed, close the fund
+        if (!(currentCycle < totalAmountOfCycles)) {
+            // If all cycles have passed, and the last cycle's time has passed, close the fund
             _closeFund();
             return;
         }
     }
-    
+
     /// @notice Fallback function, if the internal call fails somehow and the state gets stuck, allow owner to call the function again manually
     /// @dev This shouldn't happen, but is here in case there's an edge-case we didn't take into account, can possibly be removed in the future
     function selectBeneficiary() external onlyOwner {
         require(currentState == States.ChoosingBeneficiary, "Wrong State");
         _selectBeneficiary();
     }
-    
+
     /// @notice called by the owner to close the fund for emergency reasons.
     function closeFund() external onlyOwner {
         //require (!(currentCycle < totalAmountOfCycles), "Not all cycles have happened yet");
@@ -378,11 +399,16 @@ contract Fund is Ownable {
     //         this with the assumption that beneficiaries can't claim it themselves due to losing their keys for example,
     //         and prevent the fund to be stuck in limbo
     function emptyFundAfterEnd() external onlyOwner {
-        require(currentState == States.FundClosed && block.timestamp > fundEnd + 180 days  , "Can't empty yet");
+        require(
+            currentState == States.FundClosed &&
+                block.timestamp > fundEnd + 180 days,
+            "Can't empty yet"
+        );
 
         uint balance = stableToken.balanceOf(address(this));
         if (balance > 0) {
-            stableToken.transfer(msg.sender, balance);
+            bool success = stableToken.transfer(msg.sender, balance);
+            require(success, "stableToken transfer failed");
         }
     }
 
@@ -411,15 +437,18 @@ contract Fund is Ownable {
         require(!paidThisCycle[participant], "Already paid for this cycle");
         _payContribution(msg.sender, participant);
     }
-    
+
     /// @notice Called by the beneficiary to withdraw the fund
     /// @dev This follows the pull-over-push pattern.
     function withdrawFund() external {
-        require(currentState == States.FundClosed || 
-                paidThisCycle[msg.sender], "You must pay your cycle before withdrawing");
+        require(
+            currentState == States.FundClosed || paidThisCycle[msg.sender],
+            "You must pay your cycle before withdrawing"
+        );
 
         bool hasFundPool = beneficiariesPool[msg.sender] > 0;
-        bool hasCollateralPool = collateral.collateralPaymentBank(msg.sender) > 0;
+        bool hasCollateralPool = collateral.collateralPaymentBank(msg.sender) >
+            0;
         require(hasFundPool || hasCollateralPool, "No funds to withdraw");
 
         if (hasFundPool) {
@@ -431,10 +460,10 @@ contract Fund is Ownable {
                     available: contractBalance,
                     required: transferAmount
                 });
-            }
-            else {
+            } else {
                 beneficiariesPool[msg.sender] = 0;
-                stableToken.transfer(msg.sender, transferAmount); // Untrusted
+                bool success = stableToken.transfer(msg.sender, transferAmount); // Untrusted
+                require(success, "stableToken transfer failed");
             }
             emit OnFundWithdrawn(msg.sender, transferAmount);
         }
@@ -449,11 +478,9 @@ contract Fund is Ownable {
         uint cycleEndTimestamp = cycleTime * currentCycle + fundStart;
         if (block.timestamp > cycleEndTimestamp) {
             return 0;
-        } 
-        else {
+        } else {
             return cycleEndTimestamp - block.timestamp;
         }
-
     }
 
     // @notice returns the time left to contribute for this cycle
@@ -463,11 +490,13 @@ contract Fund is Ownable {
         }
 
         // Current cycle minus 1 because we use the previous cycle time as start point then add contribution period
-        uint contributionEndTimestamp = cycleTime * (currentCycle - 1) + fundStart + contributionPeriod;
+        uint contributionEndTimestamp = cycleTime *
+            (currentCycle - 1) +
+            fundStart +
+            contributionPeriod;
         if (block.timestamp > contributionEndTimestamp) {
             return 0;
-        }
-        else {
+        } else {
             return contributionEndTimestamp - block.timestamp;
         }
     }
@@ -484,7 +513,15 @@ contract Fund is Ownable {
 
     // @notice function to get cycle information of a specific participant
     // @param participant the user to get the info from
-    function getParticipantSummary(address participant) external view returns (uint, bool, bool, bool, bool) {
-        return (beneficiariesPool[participant], beneficiariesTracker[participant], paidThisCycle[participant], autoPayEnabled[participant], participantsTracker[participant]);
+    function getParticipantSummary(
+        address participant
+    ) external view returns (uint, bool, bool, bool, bool) {
+        return (
+            beneficiariesPool[participant],
+            beneficiariesTracker[participant],
+            paidThisCycle[participant],
+            autoPayEnabled[participant],
+            participantsTracker[participant]
+        );
     }
 }
