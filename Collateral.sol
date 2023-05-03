@@ -4,6 +4,7 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Fund.sol";
 
 //import "hardhat/console.sol";
@@ -53,7 +54,7 @@ contract CollateralFactory {
     }
 }
 
-contract Collateral is Ownable {
+contract Collateral is Ownable, ReentrancyGuard {
     Fund private fundInstance;
 
     AggregatorV3Interface internal priceFeed;
@@ -316,7 +317,11 @@ contract Collateral is Ownable {
 
     /// @notice Called by each member after the end of the cycle to withraw collateral
     /// @dev This follows the pull-over-push pattern.
-    function withdrawCollateral() external atState(States.ReleasingCollateral) {
+    function withdrawCollateral()
+        external
+        atState(States.ReleasingCollateral)
+        nonReentrant
+    {
         address sender = msg.sender;
         uint total = collateralMembersBank[sender] +
             collateralPaymentBank[sender];
@@ -335,7 +340,7 @@ contract Collateral is Ownable {
         }
     }
 
-    function withdrawReimbursement(address participant) external {
+    function withdrawReimbursement(address participant) external nonReentrant {
         require(address(fundContract) == address(msg.sender), "wrong caller");
         uint amount = collateralPaymentBank[participant];
         require(amount > 0, "No reimbursement to claim");

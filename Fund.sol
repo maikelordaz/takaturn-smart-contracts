@@ -5,6 +5,7 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import "./Collateral.sol";
 
@@ -13,7 +14,7 @@ import "./Collateral.sol";
 /// @notice This is used to operate the Takaturn fund
 /// @dev v1.4 (prebeta)
 /// @custom:experimental This is still in testing phase.
-contract Fund is Ownable {
+contract Fund is Ownable, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     enum States {
@@ -440,7 +441,7 @@ contract Fund is Ownable {
 
     /// @notice Called by the beneficiary to withdraw the fund
     /// @dev This follows the pull-over-push pattern.
-    function withdrawFund() external {
+    function withdrawFund() external nonReentrant {
         require(
             currentState == States.FundClosed || paidThisCycle[msg.sender],
             "You must pay your cycle before withdrawing"
