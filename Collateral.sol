@@ -170,10 +170,13 @@ contract Collateral is Ownable {
             )
         );
 
-        //TODO: check for success before initiating instance
-        fundInstance = Fund(address(fundContract));
-        setState(States.CycleOngoing);
-        emit OnFundContractDeployed(address(fundContract), address(this));
+        if (fundContract != address(0x00)) {
+            fundInstance = Fund(address(fundContract));
+            setState(States.CycleOngoing);
+            emit OnFundContractDeployed(address(fundContract), address(this));
+        } else {
+            revert();
+        }
     }
 
     /// @notice Called by each member to enter the Fund
